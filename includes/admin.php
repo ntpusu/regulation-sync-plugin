@@ -81,7 +81,7 @@ function ntpusu_regulation_sync_handle_request() {
 			wp_safe_redirect( ntpusu_regulation_sync_admin_page_url() );
 			exit;
 		}
-		$source_url = sprintf( 'https://regsys.ntpusu.org/regulation/%d/embed', $reg_id );
+		$source_url = sprintf( NTPUSU_REGULATION_SYNC_BASE_URL . '/regulation/%d/embed', $reg_id );
 		update_option( NTPUSU_REGULATION_SYNC_OPTION_LAST_CHOICE, 'id' );
 		delete_option( NTPUSU_REGULATION_SYNC_OPTION_CUSTOM_URL );
 	} elseif ( 'list' === $selected_key ) {
@@ -95,7 +95,7 @@ function ntpusu_regulation_sync_handle_request() {
 			exit;
 		}
 		if ( str_starts_with( $list_url, '/' ) ) {
-			$list_url = 'https://regsys.ntpusu.org' . $list_url;
+			$list_url = NTPUSU_REGULATION_SYNC_BASE_URL . $list_url;
 		}
 		$source_url = $list_url;
 		update_option( NTPUSU_REGULATION_SYNC_OPTION_LAST_CHOICE, 'list' );
@@ -375,7 +375,7 @@ function ntpusu_regulation_sync_render_admin_page() {
 							</label>
 							<div style="margin-top:6px;">
 								<input type="number" min="1" class="small-text" name="ntpusu_regulation_id" placeholder="e.g. 7" value="<?php echo isset( $_REQUEST['ntpusu_regulation_id'] ) ? esc_attr( wp_unslash( $_REQUEST['ntpusu_regulation_id'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification ?>" />
-								<span class="description"><?php esc_html_e( 'Builds https://regsys.ntpusu.org/regulation/{id}/embed', 'ntpusu-regulation-sync' ); ?></span>
+								<span class="description"><?php esc_html_e( 'Builds ' . NTPUSU_REGULATION_SYNC_BASE_URL . '/regulation/{id}/embed', 'ntpusu-regulation-sync' ); ?></span>
 							</div>
 						</div>
 
@@ -392,7 +392,7 @@ function ntpusu_regulation_sync_render_admin_page() {
 											<option value="<?php echo esc_attr( $link['href'] ); ?>"><?php echo esc_html( $link['text'] ); ?></option>
 										<?php endforeach; ?>
 									</select>
-									<span class="description"><?php esc_html_e( 'Fetched from https://regsys.ntpusu.org/regulation/', 'ntpusu-regulation-sync' ); ?></span>
+									<span class="description"><?php esc_html_e( 'Fetched from ' . NTPUSU_REGULATION_SYNC_BASE_URL . '/regulation/', 'ntpusu-regulation-sync' ); ?></span>
 								<?php else : ?>
 									<span class="description"><?php esc_html_e( 'Could not load the regulation list right now. You can still enter an ID or a custom URL.', 'ntpusu-regulation-sync' ); ?></span>
 								<?php endif; ?>

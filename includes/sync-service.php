@@ -156,11 +156,11 @@ function ntpusu_regulation_sync_resolve_regulation_api_url( $url ) {
 
 	$path = $parts['path'] ?? '';
 	if ( preg_match( '#^/api/regulation/(\d+)/?#', $path, $matches ) ) {
-		return 'https://regsys.ntpusu.org/api/regulation/' . $matches[1];
+		return NTPUSU_REGULATION_SYNC_BASE_URL . '/api/regulation/' . $matches[1];
 	}
 
 	if ( preg_match( '#^/regulation/(\d+)(?:/embed)?/?$#', $path, $matches ) ) {
-		return 'https://regsys.ntpusu.org/api/regulation/' . $matches[1];
+		return NTPUSU_REGULATION_SYNC_BASE_URL . '/api/regulation/' . $matches[1];
 	}
 
 	return '';

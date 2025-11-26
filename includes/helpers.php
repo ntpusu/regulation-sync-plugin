@@ -21,7 +21,7 @@ function ntpusu_regulation_sync_sources() {
 		),
 		'list'   => array(
 			'label' => __( 'Choose from regulation list', 'ntpusu-regulation-sync' ),
-			'url'   => 'https://regsys.ntpusu.org/regulation/',
+			'url'   => NTPUSU_REGULATION_SYNC_BASE_URL .'/regulation/',
 		),
 		'custom' => array(
 			'label' => __( 'Custom page URL', 'ntpusu-regulation-sync' ),
@@ -36,7 +36,7 @@ function ntpusu_regulation_sync_sources() {
  */
 function ntpusu_regulation_sync_fetch_regulation_links() {
 	$response = wp_remote_get(
-		'https://regsys.ntpusu.org/regulation/',
+		NTPUSU_REGULATION_SYNC_BASE_URL . '/regulation/',
 		array(
 			'timeout' => 15,
 		)
@@ -61,7 +61,7 @@ function ntpusu_regulation_sync_fetch_regulation_links() {
 	libxml_clear_errors();
 	libxml_use_internal_errors( $previous_state );
 
-	$base = 'https://regsys.ntpusu.org';
+	$base = NTPUSU_REGULATION_SYNC_BASE_URL;
 	$links = array();
 	foreach ( $dom->getElementsByTagName( 'a' ) as $anchor ) {
 		$href = $anchor->getAttribute( 'href' );
