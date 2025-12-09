@@ -8,7 +8,7 @@
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
-const NTPUSU_REGULATION_SYNC_BASE_URL       = 'https://regsys.ntpusu.org';
+const NTPUSU_REGULATION_SYNC_BASE_URL       = 'https://cloud.ntpusu.org';
 
 const NTPUSU_REGULATION_SYNC_OPTION_HTML            = 'ntpusu_regulation_sync_html';
 const NTPUSU_REGULATION_SYNC_OPTION_LAST_SOURCE     = 'ntpusu_regulation_sync_last_source';
