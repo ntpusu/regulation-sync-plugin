@@ -139,16 +139,19 @@ function ntpusu_regulation_sync_handle_request() {
 		exit;
 	}
 
-	update_option( NTPUSU_REGULATION_SYNC_OPTION_HTML, $result );
+	$payload     = is_array( $result ) ? $result : array( 'html' => (string) $result, 'modified' => null );
+	$update_time = $payload['modified'] ?? time();
+
+	update_option( NTPUSU_REGULATION_SYNC_OPTION_HTML, $payload['html'] );
 	update_option( NTPUSU_REGULATION_SYNC_OPTION_LAST_SOURCE, $source_url );
 	update_option( NTPUSU_REGULATION_SYNC_OPTION_LAST_CHOICE, $selected_key );
-	update_option( NTPUSU_REGULATION_SYNC_OPTION_UPDATED_AT, time() );
+	update_option( NTPUSU_REGULATION_SYNC_OPTION_UPDATED_AT, $update_time );
 
 	$extra_message = '';
 	if ( $target_post ) {
 		$post_to_map = get_post( $target_post );
 		if ( $post_to_map instanceof WP_Post ) {
-			ntpusu_regulation_sync_save_post_payload( $target_post, $source_url, $result );
+			ntpusu_regulation_sync_save_post_payload( $target_post, $source_url, $payload['html'], $update_time );
 			$extra_message = ' ' . sprintf(
 				/* translators: %s: post title */
 				__( 'The synced content is now mapped to "%s".', 'ntpusu-regulation-sync' ),
@@ -479,7 +482,7 @@ function ntpusu_regulation_sync_render_admin_page() {
 				<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
 					<?php wp_nonce_field( 'ntpusu_regulation_sync_sync_all' ); ?>
 					<input type="hidden" name="action" value="ntpusu_regulation_sync_sync_all" />
-					<?php submit_button( __( 'Sync All (you can edit)', 'ntpusu-regulation-sync' ), 'secondary', 'submit', false ); ?>
+					<?php submit_button( __( 'Sync All', 'ntpusu-regulation-sync' ), 'secondary', 'submit', false ); ?>
 				</form>
 				<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
 					<?php wp_nonce_field( 'ntpusu_regulation_sync_toggle_schedule' ); ?>

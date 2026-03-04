@@ -13,7 +13,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  * Determines the best strategy for fetching HTML from the remote regulation site.
  *
  * @param string $url URL entered or selected by the admin.
- * @return string|WP_Error
+ * @return array{html:string, modified:int|null}|WP_Error
  */
 function ntpusu_regulation_sync_fetch_html( $url ) {
 	$api_attempt = ntpusu_regulation_sync_try_regulation_api( $url );
@@ -32,7 +32,7 @@ function ntpusu_regulation_sync_fetch_html( $url ) {
  * When a regulation detail page is requested, pull the same payload the SPA uses.
  *
  * @param string $url Candidate URL.
- * @return string|WP_Error|null String when fetched, WP_Error on failure, null when URL is not recognised.
+ * @return array{html:string, modified:int|null}|WP_Error|null Array when fetched, WP_Error on failure, null when URL is not recognised.
  */
 function ntpusu_regulation_sync_try_regulation_api( $url ) {
 	$api_url = ntpusu_regulation_sync_resolve_regulation_api_url( $url );
@@ -133,7 +133,18 @@ function ntpusu_regulation_sync_try_regulation_api( $url ) {
 		}
 	}
 
-	return implode( '', $parts );
+	$modified_ts = null;
+	if ( ! empty( $data['modifiedDate'] ) ) {
+		$maybe = strtotime( $data['modifiedDate'] );
+		if ( $maybe ) {
+			$modified_ts = $maybe;
+		}
+	}
+
+	return array(
+		'html'     => implode( '', $parts ),
+		'modified' => $modified_ts,
+	);
 }
 
 /**
@@ -170,7 +181,7 @@ function ntpusu_regulation_sync_resolve_regulation_api_url( $url ) {
  * Fetches HTML from the remote endpoint using the WordPress HTTP API.
  *
  * @param string $url URL to request.
- * @return string|WP_Error
+ * @return array{html:string, modified:int|null}|WP_Error
  */
 function ntpusu_regulation_sync_fetch_remote_html( $url ) {
 	$response = wp_remote_get(
@@ -204,7 +215,10 @@ function ntpusu_regulation_sync_fetch_remote_html( $url ) {
 		);
 	}
 
-	return ntpusu_regulation_sync_prepare_html( $body, $url );
+	return array(
+		'html'     => ntpusu_regulation_sync_prepare_html( $body, $url ),
+		'modified' => null,
+	);
 }
 
 /**
@@ -323,10 +337,22 @@ function ntpusu_regulation_sync_base_url( $source_url ) {
  * @param string $source_url Remote source URL.
  * @param string $html       Synced HTML.
  */
-function ntpusu_regulation_sync_save_post_payload( $post_id, $source_url, $html ) {
+function ntpusu_regulation_sync_save_post_payload( $post_id, $source_url, $html, $update_time = null ) {
 	update_post_meta( $post_id, NTPUSU_REGULATION_SYNC_META_HTML, $html );
 	update_post_meta( $post_id, NTPUSU_REGULATION_SYNC_META_SOURCE, esc_url_raw( $source_url ) );
 	update_post_meta( $post_id, NTPUSU_REGULATION_SYNC_META_UPDATED_AT, time() );
+
+	if ( null !== $update_time ) {
+		$update_time = (int) $update_time;
+		wp_update_post(
+			array(
+				'ID'            => $post_id,
+				'post_date'     => gmdate( 'Y-m-d H:i:s', $update_time ),
+				'post_date_gmt' => gmdate( 'Y-m-d H:i:s', $update_time ),
+			)
+		);
+	}
+
 	ntpusu_regulation_sync_add_mapped_post_id( $post_id );
 }
 
@@ -446,12 +472,14 @@ function ntpusu_regulation_sync_refresh_post( $post_id, $respect_permissions = t
 		return new WP_Error( 'ntpusu_regulation_missing_source', __( 'No source URL is stored for this mapping.', 'ntpusu-regulation-sync' ) );
 	}
 
-	$result = ntpusu_regulation_sync_fetch_html( $source );
+	$result      = ntpusu_regulation_sync_fetch_html( $source );
 	if ( is_wp_error( $result ) ) {
 		return $result;
 	}
+	$result = $result['html'];
+	$update_time = $result['modified'] ?? null;
 
-	ntpusu_regulation_sync_save_post_payload( $post_id, $source, $result );
+	ntpusu_regulation_sync_save_post_payload( $post_id, $source, $result, $update_time );
 	return true;
 }
 
