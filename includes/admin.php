@@ -21,8 +21,8 @@ add_action( 'admin_post_ntpusu_regulation_sync_toggle_schedule', 'ntpusu_regulat
  */
 function ntpusu_regulation_sync_register_admin_page() {
 	add_menu_page(
-		__( 'Regulation Sync', 'ntpusu-regulation-sync' ),
-		__( 'Regulation Sync', 'ntpusu-regulation-sync' ),
+		__( '法規同步', 'ntpusu-regulation-sync' ),
+		__( '法規同步', 'ntpusu-regulation-sync' ),
 		'edit_posts',
 		'ntpusu-regulation-sync',
 		'ntpusu_regulation_sync_render_admin_page',
@@ -36,12 +36,12 @@ function ntpusu_regulation_sync_register_admin_page() {
  */
 function ntpusu_regulation_sync_handle_request() {
 	if ( ! current_user_can( 'edit_posts' ) ) {
-		wp_die( esc_html__( 'You do not have permission to perform this action.', 'ntpusu-regulation-sync' ) );
+		wp_die( esc_html__( '你沒有權限執行此操作。', 'ntpusu-regulation-sync' ) );
 	}
 
 	check_admin_referer( 'ntpusu_regulation_sync_action' );
 
-	$source_key  = isset( $_POST['ntpusu_regulation_source'] ) ? sanitize_text_field( wp_unslash( $_POST['ntpusu_regulation_source'] ) ) : 'embed';
+	$source_key  = isset( $_POST['ntpusu_regulation_source'] ) ? sanitize_text_field( wp_unslash( $_POST['ntpusu_regulation_source'] ) ) : 'id';
 	$target_post = 0;
 	if ( ! empty( $_POST['ntpusu_regulation_target_post_manual'] ) ) {
 		$target_post = absint( wp_unslash( $_POST['ntpusu_regulation_target_post_manual'] ) );
@@ -53,7 +53,7 @@ function ntpusu_regulation_sync_handle_request() {
 		if ( ! ntpusu_regulation_sync_user_can_manage_post( $target_post ) ) {
 			ntpusu_regulation_sync_store_notice(
 				'error',
-				__( 'You do not have permission to update that mapping.', 'ntpusu-regulation-sync' )
+				__( '你沒有權限更新此對應。', 'ntpusu-regulation-sync' )
 			);
 			wp_safe_redirect( ntpusu_regulation_sync_admin_page_url() );
 			exit;
@@ -61,7 +61,7 @@ function ntpusu_regulation_sync_handle_request() {
 	} elseif ( ! current_user_can( 'manage_options' ) ) {
 		ntpusu_regulation_sync_store_notice(
 			'error',
-			__( 'You must select a page you can edit to store this content.', 'ntpusu-regulation-sync' )
+			__( '你必須選擇一個可編輯的內容項目，才能儲存同步內容。', 'ntpusu-regulation-sync' )
 		);
 		wp_safe_redirect( ntpusu_regulation_sync_admin_page_url() );
 		exit;
@@ -76,12 +76,12 @@ function ntpusu_regulation_sync_handle_request() {
 		if ( ! $reg_id ) {
 			ntpusu_regulation_sync_store_notice(
 				'error',
-				__( 'Please enter a regulation ID.', 'ntpusu-regulation-sync' )
+				__( '請輸入法規編號。', 'ntpusu-regulation-sync' )
 			);
 			wp_safe_redirect( ntpusu_regulation_sync_admin_page_url() );
 			exit;
 		}
-		$source_url = sprintf( NTPUSU_REGULATION_SYNC_BASE_URL . '/regulation/%d/embed', $reg_id );
+		$source_url = ntpusu_regulation_sync_build_regulation_url( $reg_id );
 		update_option( NTPUSU_REGULATION_SYNC_OPTION_LAST_CHOICE, 'id' );
 		delete_option( NTPUSU_REGULATION_SYNC_OPTION_CUSTOM_URL );
 	} elseif ( 'list' === $selected_key ) {
@@ -89,7 +89,7 @@ function ntpusu_regulation_sync_handle_request() {
 		if ( empty( $list_url ) ) {
 			ntpusu_regulation_sync_store_notice(
 				'error',
-				__( 'Please choose a regulation from the list.', 'ntpusu-regulation-sync' )
+				__( '請從清單中選擇法規。', 'ntpusu-regulation-sync' )
 			);
 			wp_safe_redirect( ntpusu_regulation_sync_admin_page_url() );
 			exit;
@@ -105,7 +105,7 @@ function ntpusu_regulation_sync_handle_request() {
 		if ( empty( $custom_url ) ) {
 			ntpusu_regulation_sync_store_notice(
 				'error',
-				__( 'Please provide a custom URL to fetch.', 'ntpusu-regulation-sync' )
+				__( '請輸入要擷取的自訂來源網址。', 'ntpusu-regulation-sync' )
 			);
 			wp_safe_redirect( ntpusu_regulation_sync_admin_page_url() );
 			exit;
@@ -118,10 +118,16 @@ function ntpusu_regulation_sync_handle_request() {
 	if ( empty( $source_url ) ) {
 		ntpusu_regulation_sync_store_notice(
 			'error',
-			__( 'The requested source is not available.', 'ntpusu-regulation-sync' )
+			__( '指定的來源不可用。', 'ntpusu-regulation-sync' )
 		);
 		wp_safe_redirect( ntpusu_regulation_sync_admin_page_url() );
 		exit;
+	}
+
+	$source_url = ntpusu_regulation_sync_normalize_source_url( $source_url );
+
+	if ( 'custom' === $selected_key ) {
+		update_option( NTPUSU_REGULATION_SYNC_OPTION_CUSTOM_URL, $source_url );
 	}
 
 	$result = ntpusu_regulation_sync_fetch_html( $source_url );
@@ -131,7 +137,7 @@ function ntpusu_regulation_sync_handle_request() {
 			'error',
 			sprintf(
 				/* translators: %s: error message */
-				__( 'Unable to fetch HTML: %s', 'ntpusu-regulation-sync' ),
+				__( '無法取得 HTML：%s', 'ntpusu-regulation-sync' ),
 				$result->get_error_message()
 			)
 		);
@@ -139,23 +145,23 @@ function ntpusu_regulation_sync_handle_request() {
 		exit;
 	}
 
-	$payload     = is_array( $result ) ? $result : array( 'html' => (string) $result, 'modified' => null );
-	$update_time = $payload['modified'] ?? time();
+	$payload            = is_array( $result ) ? $result : array( 'html' => (string) $result, 'modified' => null );
+	$source_modified_at = $payload['modified'] ?? null;
 
 	update_option( NTPUSU_REGULATION_SYNC_OPTION_HTML, $payload['html'] );
 	update_option( NTPUSU_REGULATION_SYNC_OPTION_LAST_SOURCE, $source_url );
 	update_option( NTPUSU_REGULATION_SYNC_OPTION_LAST_CHOICE, $selected_key );
-	update_option( NTPUSU_REGULATION_SYNC_OPTION_UPDATED_AT, $update_time );
+	update_option( NTPUSU_REGULATION_SYNC_OPTION_UPDATED_AT, time() );
 
 	$extra_message = '';
 	if ( $target_post ) {
 		$post_to_map = get_post( $target_post );
 		if ( $post_to_map instanceof WP_Post ) {
-			ntpusu_regulation_sync_save_post_payload( $target_post, $source_url, $payload['html'], $update_time );
+			ntpusu_regulation_sync_save_post_payload( $target_post, $source_url, $payload['html'], $source_modified_at );
 			$extra_message = ' ' . sprintf(
 				/* translators: %s: post title */
-				__( 'The synced content is now mapped to "%s".', 'ntpusu-regulation-sync' ),
-				$post_to_map->post_title ? esc_html( $post_to_map->post_title ) : sprintf( __( 'Post #%d', 'ntpusu-regulation-sync' ), $target_post )
+				__( '已將同步內容對應到「%s」。', 'ntpusu-regulation-sync' ),
+				$post_to_map->post_title ? esc_html( $post_to_map->post_title ) : sprintf( __( '內容 #%d', 'ntpusu-regulation-sync' ), $target_post )
 			);
 		}
 	}
@@ -164,7 +170,7 @@ function ntpusu_regulation_sync_handle_request() {
 		'success',
 		sprintf(
 			/* translators: %s: URL */
-			__( 'Content synced successfully from %s.', 'ntpusu-regulation-sync' ),
+			__( '已成功自 %s 同步內容。', 'ntpusu-regulation-sync' ),
 			esc_url_raw( $source_url )
 		) . $extra_message
 	);
@@ -178,7 +184,7 @@ function ntpusu_regulation_sync_handle_request() {
  */
 function ntpusu_regulation_sync_handle_remove_map() {
 	if ( ! current_user_can( 'edit_posts' ) ) {
-		wp_die( esc_html__( 'You do not have permission to perform this action.', 'ntpusu-regulation-sync' ) );
+		wp_die( esc_html__( '你沒有權限執行此操作。', 'ntpusu-regulation-sync' ) );
 	}
 
 	check_admin_referer( 'ntpusu_regulation_sync_remove_map' );
@@ -189,7 +195,7 @@ function ntpusu_regulation_sync_handle_remove_map() {
 		if ( ! ntpusu_regulation_sync_user_can_manage_post( $post_id ) ) {
 			ntpusu_regulation_sync_store_notice(
 				'error',
-				__( 'You do not have permission to remove this mapping.', 'ntpusu-regulation-sync' )
+				__( '你沒有權限移除此對應。', 'ntpusu-regulation-sync' )
 			);
 			wp_safe_redirect( ntpusu_regulation_sync_admin_page_url() );
 			exit;
@@ -199,14 +205,14 @@ function ntpusu_regulation_sync_handle_remove_map() {
 			'success',
 			sprintf(
 				/* translators: %d: Post ID */
-				__( 'Removed the mapping for post ID %d.', 'ntpusu-regulation-sync' ),
+				__( '已移除內容 ID %d 的對應。', 'ntpusu-regulation-sync' ),
 				$post_id
 			)
 		);
 	} else {
 		ntpusu_regulation_sync_store_notice(
 			'error',
-			__( 'Unable to remove the mapping because no post ID was provided.', 'ntpusu-regulation-sync' )
+			__( '未提供內容 ID，無法移除對應。', 'ntpusu-regulation-sync' )
 		);
 	}
 
@@ -219,14 +225,14 @@ function ntpusu_regulation_sync_handle_remove_map() {
  */
 function ntpusu_regulation_sync_handle_sync_one() {
 	if ( ! current_user_can( 'edit_posts' ) ) {
-		wp_die( esc_html__( 'You do not have permission to perform this action.', 'ntpusu-regulation-sync' ) );
+		wp_die( esc_html__( '你沒有權限執行此操作。', 'ntpusu-regulation-sync' ) );
 	}
 
 	check_admin_referer( 'ntpusu_regulation_sync_sync_one' );
 
 	$post_id = isset( $_POST['ntpusu_regulation_sync_post'] ) ? absint( wp_unslash( $_POST['ntpusu_regulation_sync_post'] ) ) : 0;
 	if ( ! $post_id ) {
-		ntpusu_regulation_sync_store_notice( 'error', __( 'No mapping selected for sync.', 'ntpusu-regulation-sync' ) );
+		ntpusu_regulation_sync_store_notice( 'error', __( '尚未選擇要同步的對應。', 'ntpusu-regulation-sync' ) );
 		wp_safe_redirect( ntpusu_regulation_sync_admin_page_url() );
 		exit;
 	}
@@ -237,7 +243,7 @@ function ntpusu_regulation_sync_handle_sync_one() {
 			'error',
 			sprintf(
 				/* translators: %s: error message */
-				__( 'Unable to sync mapping: %s', 'ntpusu-regulation-sync' ),
+				__( '無法同步此對應：%s', 'ntpusu-regulation-sync' ),
 				$result->get_error_message()
 			)
 		);
@@ -249,7 +255,7 @@ function ntpusu_regulation_sync_handle_sync_one() {
 		'success',
 		sprintf(
 			/* translators: %d: post ID */
-			__( 'Synced mapping for post %d.', 'ntpusu-regulation-sync' ),
+			__( '已同步內容 %d 的對應。', 'ntpusu-regulation-sync' ),
 			$post_id
 		)
 	);
@@ -263,7 +269,7 @@ function ntpusu_regulation_sync_handle_sync_one() {
  */
 function ntpusu_regulation_sync_handle_sync_all() {
 	if ( ! current_user_can( 'edit_posts' ) ) {
-		wp_die( esc_html__( 'You do not have permission to perform this action.', 'ntpusu-regulation-sync' ) );
+		wp_die( esc_html__( '你沒有權限執行此操作。', 'ntpusu-regulation-sync' ) );
 	}
 
 	check_admin_referer( 'ntpusu_regulation_sync_sync_all' );
@@ -272,7 +278,7 @@ function ntpusu_regulation_sync_handle_sync_all() {
 
 	$message = sprintf(
 		/* translators: 1: synced count, 2: skipped count */
-		__( 'Synced %1$d mappings; skipped %2$d.', 'ntpusu-regulation-sync' ),
+		__( '已同步 %1$d 筆對應；略過 %2$d 筆。', 'ntpusu-regulation-sync' ),
 		$results['synced'],
 		$results['skipped']
 	);
@@ -293,7 +299,7 @@ function ntpusu_regulation_sync_handle_sync_all() {
  */
 function ntpusu_regulation_sync_handle_toggle_schedule() {
 	if ( ! current_user_can( 'manage_options' ) ) {
-		wp_die( esc_html__( 'Only administrators can change the sync schedule.', 'ntpusu-regulation-sync' ) );
+		wp_die( esc_html__( '只有管理員可以變更同步排程。', 'ntpusu-regulation-sync' ) );
 	}
 
 	check_admin_referer( 'ntpusu_regulation_sync_toggle_schedule' );
@@ -304,8 +310,8 @@ function ntpusu_regulation_sync_handle_toggle_schedule() {
 	ntpusu_regulation_sync_store_notice(
 		'success',
 		$enable
-			? __( 'Scheduled sync enabled.', 'ntpusu-regulation-sync' )
-			: __( 'Scheduled sync disabled.', 'ntpusu-regulation-sync' )
+			? __( '已啟用排程同步。', 'ntpusu-regulation-sync' )
+			: __( '已停用排程同步。', 'ntpusu-regulation-sync' )
 	);
 
 	wp_safe_redirect( ntpusu_regulation_sync_admin_page_url() );
@@ -345,8 +351,9 @@ function ntpusu_regulation_sync_render_admin_page() {
 		$mapped_source = ntpusu_regulation_sync_get_mapped_source( $edit_map_id );
 		if ( $mapped_source ) {
 			$last_source = $mapped_source;
-			if ( preg_match( '#/regulation/(\\d+)/?#', $mapped_source, $m ) ) {
-				$_REQUEST['ntpusu_regulation_id'] = $m[1]; // phpcs:ignore WordPress.Security.NonceVerification
+			$mapped_regulation_id = ntpusu_regulation_sync_extract_regulation_id( $mapped_source );
+			if ( $mapped_regulation_id ) {
+				$_REQUEST['ntpusu_regulation_id'] = $mapped_regulation_id; // phpcs:ignore WordPress.Security.NonceVerification
 				$last_choice                      = 'id';
 			} else {
 				$custom_url  = $mapped_source;
@@ -355,49 +362,53 @@ function ntpusu_regulation_sync_render_admin_page() {
 		}
 	}
 
+	$last_source_regulation_id = ntpusu_regulation_sync_extract_regulation_id( $last_source );
+	$selectable_posts          = ntpusu_regulation_sync_get_selectable_posts( $edit_map_id ?: 0, '法律層級法規' );
+
 	?>
 	<div class="wrap">
-		<h1><?php esc_html_e( 'NTPUSU Regulation Sync', 'ntpusu-regulation-sync' ); ?></h1>
+		<h1><?php esc_html_e( '法規同步', 'ntpusu-regulation-sync' ); ?></h1>
 		<h1><?php esc_html_e( '測試中！請在取得通知前先避免依賴此外掛', 'ntpusu-regulation-sync' ); ?></h1>
-		<p><?php esc_html_e( 'Pull the latest regulation HTML and map it to a page or store it globally. Use the [ntpusu_regulation] shortcode to render the synced content.', 'ntpusu-regulation-sync' ); ?></p>
+		<p><?php esc_html_e( '抓取最新法規 HTML，並對應到指定內容或儲存為全域副本。可使用 [ntpusu_regulation] 短代碼顯示同步內容。', 'ntpusu-regulation-sync' ); ?></p>
 
 		<div class="postbox" style="padding:16px;">
-			<h2><?php esc_html_e( 'Sync Settings', 'ntpusu-regulation-sync' ); ?></h2>
+			<h2><?php esc_html_e( '同步設定', 'ntpusu-regulation-sync' ); ?></h2>
 			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
 				<?php wp_nonce_field( 'ntpusu_regulation_sync_action' ); ?>
 				<input type="hidden" name="action" value="ntpusu_regulation_sync" />
 
 				<div style="display:flex;flex-wrap:wrap;gap:16px;">
 					<div style="flex:1;min-width:280px;">
-						<h3><?php esc_html_e( 'Choose Source', 'ntpusu-regulation-sync' ); ?></h3>
+						<h3><?php esc_html_e( '選擇來源', 'ntpusu-regulation-sync' ); ?></h3>
 
 						<div style="margin-bottom:12px;">
 							<label>
 								<input type="radio" name="ntpusu_regulation_source" value="id" <?php checked( $last_choice, 'id' ); ?> />
-								<strong><?php esc_html_e( 'Enter regulation ID (embed)', 'ntpusu-regulation-sync' ); ?></strong>
+								<strong><?php esc_html_e( '輸入法規編號', 'ntpusu-regulation-sync' ); ?></strong>
 							</label>
 							<div style="margin-top:6px;">
 								<input type="number" min="1" class="small-text" name="ntpusu_regulation_id" placeholder="e.g. 7" value="<?php echo isset( $_REQUEST['ntpusu_regulation_id'] ) ? esc_attr( wp_unslash( $_REQUEST['ntpusu_regulation_id'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification ?>" />
-								<span class="description"><?php esc_html_e( 'Builds ' . NTPUSU_REGULATION_SYNC_BASE_URL . '/regulation/{id}/embed', 'ntpusu-regulation-sync' ); ?></span>
+								<span class="description"><?php esc_html_e( '將使用 ' . NTPUSU_REGULATION_SYNC_BASE_URL . '/regulation/{id}', 'ntpusu-regulation-sync' ); ?></span>
 							</div>
 						</div>
 
 						<div style="margin-bottom:12px;">
 							<label>
 								<input type="radio" name="ntpusu_regulation_source" value="list" <?php checked( $last_choice, 'list' ); ?> />
-								<strong><?php esc_html_e( 'Choose from regulation list', 'ntpusu-regulation-sync' ); ?></strong>
+								<strong><?php esc_html_e( '從法規清單選擇', 'ntpusu-regulation-sync' ); ?></strong>
 							</label>
 							<div style="margin-top:6px;">
 								<?php if ( $reg_links ) : ?>
 									<select name="ntpusu_regulation_list_url">
-										<option value=""><?php esc_html_e( 'Select a regulation', 'ntpusu-regulation-sync' ); ?></option>
+										<option value=""><?php esc_html_e( '請選擇法規', 'ntpusu-regulation-sync' ); ?></option>
 										<?php foreach ( $reg_links as $link ) : ?>
-											<option value="<?php echo esc_attr( $link['href'] ); ?>"><?php echo esc_html( $link['text'] ); ?></option>
+											<?php $link_regulation_id = ntpusu_regulation_sync_extract_regulation_id( $link['href'] ); ?>
+											<option value="<?php echo esc_attr( $link['href'] ); ?>" <?php selected( $last_source === $link['href'] || ( $last_source_regulation_id && $link_regulation_id && $last_source_regulation_id === $link_regulation_id ), true ); ?>><?php echo esc_html( $link['text'] ); ?></option>
 										<?php endforeach; ?>
 									</select>
-									<span class="description"><?php esc_html_e( 'Fetched from ' . NTPUSU_REGULATION_SYNC_BASE_URL . '/regulation/', 'ntpusu-regulation-sync' ); ?></span>
+									<span class="description"><?php esc_html_e( '清單來源：' . NTPUSU_REGULATION_SYNC_BASE_URL . '/api/regulation/list', 'ntpusu-regulation-sync' ); ?></span>
 								<?php else : ?>
-									<span class="description"><?php esc_html_e( 'Could not load the regulation list right now. You can still enter an ID or a custom URL.', 'ntpusu-regulation-sync' ); ?></span>
+									<span class="description"><?php esc_html_e( '目前無法載入法規清單，仍可輸入法規編號或自訂來源網址。', 'ntpusu-regulation-sync' ); ?></span>
 								<?php endif; ?>
 							</div>
 						</div>
@@ -405,7 +416,7 @@ function ntpusu_regulation_sync_render_admin_page() {
 						<div style="margin-bottom:12px;">
 							<label>
 								<input type="radio" name="ntpusu_regulation_source" value="custom" <?php checked( $last_choice, 'custom' ); ?> />
-								<strong><?php esc_html_e( 'Custom page URL', 'ntpusu-regulation-sync' ); ?></strong>
+								<strong><?php esc_html_e( '自訂來源網址', 'ntpusu-regulation-sync' ); ?></strong>
 							</label>
 							<div style="margin-top:6px;">
 								<input type="url" class="regular-text" name="ntpusu_regulation_custom_url" placeholder="https://example.com/path" value="<?php echo esc_attr( $custom_url ); ?>" />
@@ -414,31 +425,58 @@ function ntpusu_regulation_sync_render_admin_page() {
 					</div>
 
 					<div style="flex:1;min-width:280px;">
-						<h3><?php esc_html_e( 'Article or Page to Update', 'ntpusu-regulation-sync' ); ?></h3>
-						<p><?php esc_html_e( 'Choose a WordPress page (or provide any post ID) to map the synced HTML to that post.', 'ntpusu-regulation-sync' ); ?></p>
-						<?php
-						wp_dropdown_pages(
-							array(
-								'name'              => 'ntpusu_regulation_target_post',
-								'id'                => 'ntpusu_regulation_target_post',
-								'show_option_none'  => __( 'Do not attach to a specific page', 'ntpusu-regulation-sync' ),
-								'option_none_value' => '0',
-								'selected'          => $edit_map_id ?: 0,
-							)
-						);
-						?>
+						<h3><?php esc_html_e( '選擇要更新的內容', 'ntpusu-regulation-sync' ); ?></h3>
+						<p><?php esc_html_e( '選擇要接收同步 HTML 的 WordPress 內容項目。', 'ntpusu-regulation-sync' ); ?></p>
+						<?php if ( $selectable_posts ) : ?>
+							<select name="ntpusu_regulation_target_post" id="ntpusu_regulation_target_post">
+								<option value="0"><?php esc_html_e( '不對應到特定內容', 'ntpusu-regulation-sync' ); ?></option>
+								<?php
+								$current_type_label = '';
+
+								foreach ( $selectable_posts as $selectable_post ) :
+									if ( $current_type_label !== $selectable_post['type_label'] ) :
+										if ( '' !== $current_type_label ) :
+											?>
+											</optgroup>
+											<?php
+										endif;
+										$current_type_label = $selectable_post['type_label'];
+										?>
+										<optgroup label="<?php echo esc_attr( $current_type_label ); ?>">
+									<?php endif; ?>
+									<?php
+									$option_label = sprintf(
+										'%1$s (#%2$d)%3$s',
+										$selectable_post['title'],
+										$selectable_post['id'],
+										'publish' !== $selectable_post['status'] ? ' - ' . $selectable_post['status_label'] : ''
+									);
+									?>
+									<option value="<?php echo esc_attr( $selectable_post['id'] ); ?>" <?php selected( $edit_map_id ?: 0, $selectable_post['id'] ); ?>>
+										<?php echo esc_html( $option_label ); ?>
+									</option>
+								<?php endforeach; ?>
+								<?php if ( '' !== $current_type_label ) : ?>
+									</optgroup>
+								<?php endif; ?>
+							</select>
+						<?php else : ?>
+							<select id="ntpusu_regulation_target_post" disabled="disabled">
+								<option><?php esc_html_e( '找不到可編輯內容', 'ntpusu-regulation-sync' ); ?></option>
+							</select>
+						<?php endif; ?>
 						<p style="margin-top:12px;">
 							<label for="ntpusu_regulation_target_post_manual">
-								<?php esc_html_e( 'Or enter a post/article ID manually:', 'ntpusu-regulation-sync' ); ?>
+								<?php esc_html_e( '或手動輸入內容 ID：', 'ntpusu-regulation-sync' ); ?>
 							</label>
 							<input type="number" name="ntpusu_regulation_target_post_manual" id="ntpusu_regulation_target_post_manual" class="small-text" min="0" value="<?php echo $edit_map_id ? esc_attr( $edit_map_id ) : ''; ?>" />
 						</p>
-						<p class="description"><?php esc_html_e( 'If you leave these fields empty the plugin will only update the global copy.', 'ntpusu-regulation-sync' ); ?></p>
+						<p class="description"><?php esc_html_e( '若留空，外掛只會更新全域副本。', 'ntpusu-regulation-sync' ); ?></p>
 					</div>
 				</div>
 
 				<p>
-					<?php submit_button( __( 'Sync Now', 'ntpusu-regulation-sync' ), 'primary', 'ntpusu_regulation_sync_submit', false ); ?>
+					<?php submit_button( __( '立即同步', 'ntpusu-regulation-sync' ), 'primary', 'ntpusu_regulation_sync_submit', false ); ?>
 				</p>
 			</form>
 		</div>
@@ -459,13 +497,13 @@ function ntpusu_regulation_sync_render_admin_page() {
 						esc_url( $last_source )
 					);
 				} else {
-					$source_markup = esc_html__( 'Unknown source', 'ntpusu-regulation-sync' );
+					$source_markup = esc_html__( '未知來源', 'ntpusu-regulation-sync' );
 				}
 
 				echo wp_kses_post(
 					sprintf(
 						/* translators: 1: human-readable date, 2: URL */
-						__( 'Last updated %1$s from %2$s.', 'ntpusu-regulation-sync' ),
+						__( '最近同步時間：%1$s，來源：%2$s。', 'ntpusu-regulation-sync' ),
 						$date_string,
 						$source_markup
 					)
@@ -477,39 +515,39 @@ function ntpusu_regulation_sync_render_admin_page() {
 		$mapped_post_ids = ntpusu_regulation_sync_get_mapped_post_ids();
 		if ( ! empty( $mapped_post_ids ) ) :
 			?>
-			<h2 style="margin-top:32px; display:flex; align-items:center; gap:12px;"><?php esc_html_e( 'Mapped Articles/Pages', 'ntpusu-regulation-sync' ); ?></h2>
+			<h2 style="margin-top:32px; display:flex; align-items:center; gap:12px;"><?php esc_html_e( '已對應內容', 'ntpusu-regulation-sync' ); ?></h2>
 			<div style="display:flex;gap:12px;align-items:center;margin-bottom:8px;">
 				<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
 					<?php wp_nonce_field( 'ntpusu_regulation_sync_sync_all' ); ?>
 					<input type="hidden" name="action" value="ntpusu_regulation_sync_sync_all" />
-					<?php submit_button( __( 'Sync All', 'ntpusu-regulation-sync' ), 'secondary', 'submit', false ); ?>
+					<?php submit_button( __( '全部同步', 'ntpusu-regulation-sync' ), 'secondary', 'submit', false ); ?>
 				</form>
 				<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
 					<?php wp_nonce_field( 'ntpusu_regulation_sync_toggle_schedule' ); ?>
 					<input type="hidden" name="action" value="ntpusu_regulation_sync_toggle_schedule" />
 					<label style="display:flex;align-items:center;gap:6px;">
 						<input type="checkbox" name="ntpusu_regulation_sync_schedule" value="1" <?php checked( $schedule_on ); ?> <?php disabled( ! current_user_can( 'manage_options' ) ); ?> />
-						<?php esc_html_e( 'Enable scheduled sync (twice daily)', 'ntpusu-regulation-sync' ); ?>
+						<?php esc_html_e( '啟用排程同步（每日兩次）', 'ntpusu-regulation-sync' ); ?>
 					</label>
 					<?php
 					$schedule_btn_attrs = current_user_can( 'manage_options' ) ? array() : array( 'disabled' => 'disabled' );
-					submit_button( __( 'Save Schedule', 'ntpusu-regulation-sync' ), 'secondary', 'submit', false, $schedule_btn_attrs );
+					submit_button( __( '儲存排程', 'ntpusu-regulation-sync' ), 'secondary', 'submit', false, $schedule_btn_attrs );
 					?>
 					<?php if ( $next_scheduled ) : ?>
-						<span class="description" style="margin-left:8px;"><?php printf( esc_html__( 'Next run: %s', 'ntpusu-regulation-sync' ), esc_html( wp_date( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), $next_scheduled ) ) ); ?></span>
+						<span class="description" style="margin-left:8px;"><?php printf( esc_html__( '下次執行：%s', 'ntpusu-regulation-sync' ), esc_html( wp_date( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), $next_scheduled ) ) ); ?></span>
 					<?php endif; ?>
 				</form>
 			</div>
-			<p><?php esc_html_e( 'These posts keep a dedicated copy of the synced HTML.', 'ntpusu-regulation-sync' ); ?></p>
+			<p><?php esc_html_e( '這些內容各自保存一份同步 HTML 副本。', 'ntpusu-regulation-sync' ); ?></p>
 			<table class="widefat striped">
 				<thead>
 					<tr>
-						<th><?php esc_html_e( 'Post', 'ntpusu-regulation-sync' ); ?></th>
-						<th><?php esc_html_e( 'Source URL', 'ntpusu-regulation-sync' ); ?></th>
-						<th><?php esc_html_e( 'Permission', 'ntpusu-regulation-sync' ); ?></th>
-						<th><?php esc_html_e( 'Last Synced', 'ntpusu-regulation-sync' ); ?></th>
-						<th><?php esc_html_e( 'Shortcode', 'ntpusu-regulation-sync' ); ?></th>
-						<th><?php esc_html_e( 'Actions', 'ntpusu-regulation-sync' ); ?></th>
+						<th><?php esc_html_e( '內容', 'ntpusu-regulation-sync' ); ?></th>
+						<th><?php esc_html_e( '來源網址', 'ntpusu-regulation-sync' ); ?></th>
+						<th><?php esc_html_e( '權限', 'ntpusu-regulation-sync' ); ?></th>
+						<th><?php esc_html_e( '最近同步', 'ntpusu-regulation-sync' ); ?></th>
+						<th><?php esc_html_e( '短代碼', 'ntpusu-regulation-sync' ); ?></th>
+						<th><?php esc_html_e( '操作', 'ntpusu-regulation-sync' ); ?></th>
 					</tr>
 				</thead>
 				<tbody>
@@ -540,7 +578,7 @@ function ntpusu_regulation_sync_render_admin_page() {
 										<?php echo esc_html( $source ); ?>
 									</a>
 								<?php else : ?>
-									<em><?php esc_html_e( 'Unknown source', 'ntpusu-regulation-sync' ); ?></em>
+									<em><?php esc_html_e( '未知來源', 'ntpusu-regulation-sync' ); ?></em>
 								<?php endif; ?>
 							</td>
 							<td>
@@ -554,7 +592,7 @@ function ntpusu_regulation_sync_render_admin_page() {
 								<?php
 								echo $mapped_date
 									? esc_html( wp_date( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), $mapped_date ) )
-									: esc_html__( 'Not synced yet', 'ntpusu-regulation-sync' );
+									: esc_html__( '尚未同步', 'ntpusu-regulation-sync' );
 								?>
 							</td>
 							<td>
@@ -563,19 +601,19 @@ function ntpusu_regulation_sync_render_admin_page() {
 							<td>
 								<div style="display:flex;gap:8px;flex-wrap:wrap;">
 									<a class="button<?php echo $can_manage ? '' : ' disabled'; ?>" href="<?php echo esc_url( add_query_arg( array( 'page' => 'ntpusu-regulation-sync', 'edit_map' => $mapped_id ), admin_url( 'admin.php' ) ) ); ?>" <?php disabled( ! $can_manage ); ?>>
-										<?php esc_html_e( 'Edit', 'ntpusu-regulation-sync' ); ?>
+										<?php esc_html_e( '編輯', 'ntpusu-regulation-sync' ); ?>
 									</a>
 									<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
 										<?php wp_nonce_field( 'ntpusu_regulation_sync_sync_one' ); ?>
 										<input type="hidden" name="action" value="ntpusu_regulation_sync_sync_one" />
 										<input type="hidden" name="ntpusu_regulation_sync_post" value="<?php echo esc_attr( $mapped_id ); ?>" />
-										<?php submit_button( __( 'Sync', 'ntpusu-regulation-sync' ), 'secondary', 'submit', false, $action_btn_attrs ); ?>
+										<?php submit_button( __( '同步', 'ntpusu-regulation-sync' ), 'secondary', 'submit', false, $action_btn_attrs ); ?>
 									</form>
 									<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
 										<?php wp_nonce_field( 'ntpusu_regulation_sync_remove_map' ); ?>
 										<input type="hidden" name="action" value="ntpusu_regulation_sync_remove_map" />
 										<input type="hidden" name="ntpusu_regulation_remove_post" value="<?php echo esc_attr( $mapped_id ); ?>" />
-										<?php submit_button( __( 'Remove', 'ntpusu-regulation-sync' ), 'delete', 'submit', false, $action_btn_attrs ); ?>
+										<?php submit_button( __( '移除', 'ntpusu-regulation-sync' ), 'delete', 'submit', false, $action_btn_attrs ); ?>
 									</form>
 								</div>
 							</td>
@@ -583,14 +621,14 @@ function ntpusu_regulation_sync_render_admin_page() {
 					<?php endforeach; ?>
 					<?php if ( ! $printed ) : ?>
 						<tr>
-							<td colspan="5"><?php esc_html_e( 'No mapped posts found.', 'ntpusu-regulation-sync' ); ?></td>
+							<td colspan="5"><?php esc_html_e( '目前沒有已對應內容。', 'ntpusu-regulation-sync' ); ?></td>
 						</tr>
 					<?php endif; ?>
 				</tbody>
 			</table>
 		<?php endif; ?>
 		<?php if ( $stored_html ) : ?>
-			<h2><?php esc_html_e( 'Stored Preview', 'ntpusu-regulation-sync' ); ?></h2>
+			<h2><?php esc_html_e( '已儲存內容預覽', 'ntpusu-regulation-sync' ); ?></h2>
 			<div style="border:1px solid #ccd0d4;padding:1em;background:#fff;max-height:400px;overflow:auto;">
 				<?php echo ntpusu_regulation_sync_render_html( $stored_html ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
 			</div>

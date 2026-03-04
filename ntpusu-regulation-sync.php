@@ -1,7 +1,7 @@
 <?php
 /**
  * Plugin Name: NTPUSU Regulation Sync
- * Description: Fetches the latest regulation HTML from regsys.ntpusu.org and exposes it via a shortcode so editors can update a section with one click.
+ * Description: Fetches the latest regulation HTML from cloud.ntpusu.org and exposes it via a shortcode so editors can update a section with one click.
  * Version:     1.0.0
  * Author:      AnJen Wu with help of Codex
  * License:     GPL-2.0-or-later

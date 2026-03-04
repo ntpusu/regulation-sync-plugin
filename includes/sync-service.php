@@ -109,7 +109,7 @@ function ntpusu_regulation_sync_try_regulation_api( $url ) {
 	if ( ! empty( $meta_line_bits ) ) {
 		$parts[] = sprintf(
 			'<p class="regulation-meta">%s</p>',
-			esc_html( implode( ' · ', $meta_line_bits ) )
+			esc_html( implode( ' | ', $meta_line_bits ) )
 		);
 	}
 
@@ -117,6 +117,7 @@ function ntpusu_regulation_sync_try_regulation_api( $url ) {
 
 	if ( ! empty( $data['history'] ) && is_array( $data['history'] ) ) {
 		$history_items = '';
+
 		foreach ( $data['history'] as $history ) {
 			$history_items .= sprintf(
 				'<li>%s</li>',
@@ -127,23 +128,15 @@ function ntpusu_regulation_sync_try_regulation_api( $url ) {
 		if ( $history_items ) {
 			$parts[] = sprintf(
 				'<div class="regulation-history"><h2 class="wp-block-heading">%s</h2><ul>%s</ul></div>',
-				esc_html__( '沿革', 'ntpusu-regulation-sync' ),
+				esc_html__( 'Revision History', 'ntpusu-regulation-sync' ),
 				$history_items
 			);
 		}
 	}
 
-	$modified_ts = null;
-	if ( ! empty( $data['modifiedDate'] ) ) {
-		$maybe = strtotime( $data['modifiedDate'] );
-		if ( $maybe ) {
-			$modified_ts = $maybe;
-		}
-	}
-
 	return array(
 		'html'     => implode( '', $parts ),
-		'modified' => $modified_ts,
+		'modified' => ! empty( $data['modifiedDate'] ) ? ntpusu_regulation_sync_parse_regulation_modified_date( $data['modifiedDate'] ) : null,
 	);
 }
 
@@ -154,27 +147,34 @@ function ntpusu_regulation_sync_try_regulation_api( $url ) {
  * @return string Empty string when not supported.
  */
 function ntpusu_regulation_sync_resolve_regulation_api_url( $url ) {
-	$parts = wp_parse_url( $url );
+	$regulation_id = ntpusu_regulation_sync_extract_regulation_id( $url );
 
-	if ( empty( $parts['host'] ) ) {
+	if ( ! $regulation_id ) {
 		return '';
 	}
 
-	$host = strtolower( $parts['host'] );
-	if ( false === strpos( $host, 'regsys.ntpusu.org' ) ) {
+	return ntpusu_regulation_sync_build_regulation_api_url( $regulation_id );
+}
+
+/**
+ * Normalizes a source URL to the actual endpoint used for syncing.
+ *
+ * Regulation detail URLs are converted to the single-regulation API URL so the
+ * stored source matches the real fetch target shown in the admin UI.
+ *
+ * @param string $url Admin-provided source URL.
+ * @return string
+ */
+function ntpusu_regulation_sync_normalize_source_url( $url ) {
+	$url = esc_url_raw( trim( (string) $url ) );
+
+	if ( '' === $url ) {
 		return '';
 	}
 
-	$path = $parts['path'] ?? '';
-	if ( preg_match( '#^/api/regulation/(\d+)/?#', $path, $matches ) ) {
-		return NTPUSU_REGULATION_SYNC_BASE_URL . '/api/regulation/' . $matches[1];
-	}
+	$api_url = ntpusu_regulation_sync_resolve_regulation_api_url( $url );
 
-	if ( preg_match( '#^/regulation/(\d+)(?:/embed)?/?$#', $path, $matches ) ) {
-		return NTPUSU_REGULATION_SYNC_BASE_URL . '/api/regulation/' . $matches[1];
-	}
-
-	return '';
+	return $api_url ? $api_url : $url;
 }
 
 /**
@@ -333,27 +333,46 @@ function ntpusu_regulation_sync_base_url( $source_url ) {
 /**
  * Persists the synced HTML and metadata against a WordPress post.
  *
- * @param int    $post_id    Post ID.
- * @param string $source_url Remote source URL.
- * @param string $html       Synced HTML.
+ * @param int      $post_id     Post ID.
+ * @param string   $source_url  Remote source URL.
+ * @param string   $html        Synced HTML.
+ * @param int|null $update_time Regulation modified timestamp, if available.
  */
 function ntpusu_regulation_sync_save_post_payload( $post_id, $source_url, $html, $update_time = null ) {
+	$source_url = ntpusu_regulation_sync_normalize_source_url( $source_url );
+
 	update_post_meta( $post_id, NTPUSU_REGULATION_SYNC_META_HTML, $html );
 	update_post_meta( $post_id, NTPUSU_REGULATION_SYNC_META_SOURCE, esc_url_raw( $source_url ) );
 	update_post_meta( $post_id, NTPUSU_REGULATION_SYNC_META_UPDATED_AT, time() );
 
 	if ( null !== $update_time ) {
-		$update_time = (int) $update_time;
-		wp_update_post(
-			array(
-				'ID'            => $post_id,
-				'post_date'     => gmdate( 'Y-m-d H:i:s', $update_time ),
-				'post_date_gmt' => gmdate( 'Y-m-d H:i:s', $update_time ),
-			)
-		);
+		ntpusu_regulation_sync_update_post_dates( $post_id, $update_time );
 	}
 
 	ntpusu_regulation_sync_add_mapped_post_id( $post_id );
+}
+
+/**
+ * Updates the WordPress post's publish date to match the regulation date.
+ *
+ * @param int $post_id Post ID.
+ * @param int $timestamp Regulation timestamp in Unix seconds.
+ */
+function ntpusu_regulation_sync_update_post_dates( $post_id, $timestamp ) {
+	$timestamp = (int) $timestamp;
+
+	if ( $timestamp <= 0 ) {
+		return;
+	}
+
+	wp_update_post(
+		array(
+			'ID'            => $post_id,
+			'edit_date'     => true,
+			'post_date'     => wp_date( 'Y-m-d H:i:s', $timestamp ),
+			'post_date_gmt' => gmdate( 'Y-m-d H:i:s', $timestamp ),
+		)
+	);
 }
 
 /**
@@ -453,8 +472,8 @@ function ntpusu_regulation_sync_get_mapped_updated_at( $post_id ) {
 /**
  * Refreshes a single mapped post from its stored source.
  *
- * @param int  $post_id              Post ID.
- * @param bool $respect_permissions  Whether to enforce user capability checks.
+ * @param int  $post_id             Post ID.
+ * @param bool $respect_permissions Whether to enforce user capability checks.
  * @return true|WP_Error
  */
 function ntpusu_regulation_sync_refresh_post( $post_id, $respect_permissions = true ) {
@@ -472,14 +491,18 @@ function ntpusu_regulation_sync_refresh_post( $post_id, $respect_permissions = t
 		return new WP_Error( 'ntpusu_regulation_missing_source', __( 'No source URL is stored for this mapping.', 'ntpusu-regulation-sync' ) );
 	}
 
-	$result      = ntpusu_regulation_sync_fetch_html( $source );
-	if ( is_wp_error( $result ) ) {
-		return $result;
+	$payload = ntpusu_regulation_sync_fetch_html( $source );
+	if ( is_wp_error( $payload ) ) {
+		return $payload;
 	}
-	$result = $result['html'];
-	$update_time = $result['modified'] ?? null;
 
-	ntpusu_regulation_sync_save_post_payload( $post_id, $source, $result, $update_time );
+	ntpusu_regulation_sync_save_post_payload(
+		$post_id,
+		$source,
+		$payload['html'],
+		$payload['modified'] ?? null
+	);
+
 	return true;
 }
 
