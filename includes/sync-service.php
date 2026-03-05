@@ -106,13 +106,6 @@ function ntpusu_regulation_sync_try_regulation_api( $url ) {
 		$meta_line_bits[] = sanitize_text_field( $data['modifiedDate'] );
 	}
 
-	if ( ! empty( $meta_line_bits ) ) {
-		$parts[] = sprintf(
-			'<p class="regulation-meta">%s</p>',
-			esc_html( implode( ' | ', $meta_line_bits ) )
-		);
-	}
-
 	$parts[] = $full_text;
 
 	if ( ! empty( $data['history'] ) && is_array( $data['history'] ) ) {
@@ -128,7 +121,7 @@ function ntpusu_regulation_sync_try_regulation_api( $url ) {
 		if ( $history_items ) {
 			$parts[] = sprintf(
 				'<div class="regulation-history"><h2 class="wp-block-heading">%s</h2><ul>%s</ul></div>',
-				esc_html__( 'Revision History', 'ntpusu-regulation-sync' ),
+				esc_html__( '沿革', 'ntpusu-regulation-sync' ),
 				$history_items
 			);
 		}
