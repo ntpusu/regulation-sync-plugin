@@ -91,19 +91,23 @@ function ntpusu_regulation_sync_try_regulation_api( $url ) {
 
 	$parts = array();
 
+	// 1. 修改法規標題輸出格式
 	if ( ! empty( $data['titleFull'] ) ) {
 		$parts[] = sprintf(
-			'<h2 class="regulation-title wp-block-heading">%s</h2>',
+			'<p class="regulation-title wp-block-paragraph"><strong>法規標題：</strong>%s</p>',
 			esc_html( $data['titleFull'] )
 		);
 	}
 
-	$meta_line_bits = array();
-	if ( ! empty( $data['modifiedType'] ) ) {
-		$meta_line_bits[] = sanitize_text_field( $data['modifiedType'] );
-	}
+	// 2. 修改異動別與日期輸出格式
 	if ( ! empty( $data['modifiedDate'] ) ) {
-		$meta_line_bits[] = sanitize_text_field( $data['modifiedDate'] );
+		// 若有提供 modType 則使用，否則預設為「異動」
+		$mod_type = ! empty( $data['modifiedType'] ) ? sanitize_text_field( $data['modifiedType'] ) : '異動';
+		$parts[] = sprintf(
+			'<p class="regulation-meta wp-block-paragraph"><strong>%s日期：</strong>%s</p>',
+			esc_html( $mod_type ),
+			esc_html( sanitize_text_field( $data['modifiedDate'] ) )
+		);
 	}
 
 	$parts[] = $full_text;
