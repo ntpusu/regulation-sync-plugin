@@ -120,7 +120,7 @@ function ntpusu_regulation_sync_try_regulation_api( $url ) {
 
 		if ( $history_items ) {
 			$parts[] = sprintf(
-				'<div class="regulation-history"><h2 class="wp-block-heading">%s</h2><ul>%s</ul></div>',
+				'<div class="regulation-history"><h2 class="wp-block-heading">%s</h2><ol>%s</ol></div>',
 				esc_html__( '沿革', 'ntpusu-regulation-sync' ),
 				$history_items
 			);
